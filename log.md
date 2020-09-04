@@ -82,3 +82,34 @@ clean up
 Check that we can get it out:
 
 `sudo tpm2_unseal -c 0x81000000 -p pcr:sha256:0,2,4,7,8,9,14`
+
+When booting from a bootable usb tpm2_unseal no longer works, great!
+
+It also doesn't work when adding break=bottom as a kernel param and attempting
+to unseal from the initramfs debug busybox, excellent. That's ssecure now!
+
+Lets try using it to boot. Create a script at `/usr/local/sbin/unseal.sh` containing
+
+```
+#!/bin/sh
+tpm2_unseal -c 0x81000000 -p pcr:sha256:0,2,4,7,8,9,14
+```
+
+Set the permissions:
+
+```
+sudo chown root:root /usr/local/sbin/unseal.sh
+sudo chmod 0750 /usr/local/sbin/unseal.sh
+```
+
+Set the keyscript in `/etc/crypttab` by ensuring it contains `keyscript=/usr/local/sbin/unseal.sh`
+
+Add tpm2_unseal to initramfs by adding the following to `/etc/initramfs-tools/hooks/tpm2-decryptkey`:
+
+`copy_exec /usr/bin/tpm2_unseal`
+
+And build the updated initramfs:
+
+```
+sudo mkinitramfs -o /boot/initrd.img-`uname -r` `uname -r`
+```
