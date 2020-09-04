@@ -39,3 +39,46 @@ What else does the TPM not block? Two things to explore:
    good, we need to check that
 2. What if I boot to a usb with tpm2-tools? Have we actually saved our key with
    a policy that prevents anybody else from reading it out?
+
+Booted to ubuntu live usb, installed tpm2-tools, was able to extract the key
+with `tpm2_nvread -C 0x40000001 0x1500016`. So this ain't good enough. We're
+safe if somebody moves the encrypted disk to another pc, but we're not if they
+boot from a usb.
+
+https://medium.com/@pawitp/full-disk-encryption-on-arch-linux-backed-by-tpm-2-0-c0892cab9704
+is actually doing stuff that uses policies, lets see if we can adapt that. We're
+on tpm2 > 4.0.0 so we need the commands here:
+https://medium.com/@pawitp/its-certainly-annoying-that-tpm2-tools-like-to-change-their-command-line-parameters-d5d0f4351206
+
+Lets create a policy sha:
+
+`sudo tpm2_createpolicy --policy-pcr -l sha256:0,2,4,7,8,9,14 -L policy.digest`
+
+This'll lock a lot of PCRs. 0 is the bios, 2 is less clear, seen things
+suggesting it stops oeople changing the boot options in the bios. 4 is grub
+itself, 7 is secure boot settings, 8 is grub config, 9 is all the files grub
+loads, and 14 is the set of keys grub uses to verify kernel signatures.
+
+Create a primary object under the endorsement hierachy (not fully sure what this actually means):
+
+`sudo tpm2_createprimary -C e -g sha256 -G rsa -c primary.context`
+
+Create a child object that we can load into the tpm (root.key should be your luks key):
+
+`sudo tpm2_create -g sha256 -u obj.pub -r obj.priv -C primary.context -L policy.digest -a "noda|adminwithpolicy|fixedparent|fixedtpm" -i root.key`
+
+Load it into the tpm:
+
+`sudo tpm2_load -C primary.context -u obj.pub -r obj.priv -c load.context`
+
+Persist it in the tpm at permanent handle 0x81000000
+
+`sudo tpm2_evictcontrol -C o -c load.context 0x81000000`
+
+clean up
+
+`sudo rm load.context obj.priv obj.pub policy.digest primary.context`
+
+Check that we can get it out:
+
+`sudo tpm2_unseal -c 0x81000000 -p pcr:sha256:0,2,4,7,8,9,14`
