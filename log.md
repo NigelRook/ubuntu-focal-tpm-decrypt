@@ -2,6 +2,15 @@ Start point: fresh ubuntu 20.04 install on my Dell Latitude 7410 created by
 allowing the installer to erase and repartition the disk, with the LVM and
 encryption advnaced options selected. Secure Boot enabled.
 
+I also checked the use proprietary drivers option during installation. This
+caused my next boot to be into MokManager.  Based on
+https://wiki.ubuntu.com/UEFI/SecureBoot I believe that checking the proprietary
+drvers checkbox causes an additional keypair to be installed in grub which
+allows ubuntu to sign kernels compiled locally. That's relevant because we end
+up tinkering with initramfs and that may well be signed. I haven't tested
+whether things still work if proprietary drivers aren't enabled and MokManager
+hasn't been run.
+
 Followed [docs/kelderek.md](docs/kelderek.md)
 
 Saved initial pcrs to allow watching for changes (pcrs not comitted)
