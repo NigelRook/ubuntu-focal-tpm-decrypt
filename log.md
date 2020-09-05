@@ -113,3 +113,66 @@ And build the updated initramfs:
 ```
 sudo mkinitramfs -o /boot/initrd.img-`uname -r` `uname -r`
 ```
+
+Which fails, as we'd expect, because initramfs has changed so we'd expect pcr 9
+to be different. And checking the PCRs that's exactly what happened. Recovering
+from this involves editing the grub config and adding `break=mount`, then
+rewriting unseal.sh to contain
+
+```
+#!/bin/sh
+/lib/cryptsetup/askpass "Password"
+```
+
+After `exit` the keyscript will then instead offer a password prompt entering
+the original luks key configured during installation will unlock the volume.
+
+Lets add askpass as a fallback in our keyscript:
+
+```
+#!/bin/sh
+key=$(tpm2_unseal -c 0x81000000 -p pcr:sha256:0,2,4,7,8,9,14)
+if $?; then
+    echo $key
+else
+    /lib/cryptsetup/askpass "Automatic unlock failed, enter encrypted volume key"
+fi
+```
+
+After running mkinitramfs again and rebooting, we get prompted for a password
+just like we did before configuring a keyscript. That's a solid fallback.
+
+Lets re-add our key to the TPM using the following script:
+
+```
+#!/bin/bash
+
+if [[ ! -f "$1" ]]; then
+    echo "Usage: seal-root-key keyfile"
+    exit 1
+fi
+
+PCR_POLICY="sha256:0,2,4,7,8,9,14"
+PERMANENT_HANDLE=0x81000000
+
+set -e
+
+STATE_DIR=${STATE_DIR:-"/var/local/tpm-root-key"}
+mkdir -p -m 0750 $STATE_DIR
+cd $STATE_DIR
+
+# Create policy if not present
+[[ -f "policy.digest" ]] || tpm2_createpolicy --policy-pcr -l $PCR_POLICY -L policy.digest
+# Create primary object context if not present
+[[ -f "primary.context" ]] || tpm2_createprimary -C e -g sha256 -G rsa -c primary.context
+# Create child object
+tpm2_create -g sha256 -u obj.pub -r obj.priv -C primary.context -L policy.digest -a "noda|adminwithpolicy|fixedparent|fixedtpm" -i $1
+# Load into tpm
+tpm2_load -C primary.context -u obj.pub -r obj.priv -c load.context
+# Remove old key if present
+tpm2_readpublic -c $PERMANENT_HANDLE && tpm2_evictcontrol -C o -c $PERMANENT_HANDLE
+# Persist object in tpm
+tpm2_evictcontrol -C o -c load.context $PERMANENT_HANDLE
+# Clean up
+rm load.context obj.priv obj.pub
+```
