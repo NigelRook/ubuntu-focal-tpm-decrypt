@@ -15,9 +15,9 @@ mkdir -p -m 0750 $STATE_DIR
 cd $STATE_DIR
 
 # Create policy if not present
-[[ -f "policy.digest" ]] || tpm2_createpolicy --policy-pcr -l $PCR_POLICY -L policy.digest
-# Create primary object context if not present
-[[ -f "primary.context" ]] || tpm2_createprimary -C e -g sha256 -G rsa -c primary.context
+tpm2_createpolicy --policy-pcr -l $PCR_POLICY -L policy.digest
+# Create primary object context
+tpm2_createprimary -C e -g sha256 -G rsa -c primary.context
 # Create child object
 tpm2_create -g sha256 -u obj.pub -r obj.priv -C primary.context -L policy.digest -a "noda|adminwithpolicy|fixedparent|fixedtpm" -i $1
 # Load into tpm

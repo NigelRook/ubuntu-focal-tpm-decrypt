@@ -176,3 +176,57 @@ tpm2_evictcontrol -C o -c load.context $PERMANENT_HANDLE
 # Clean up
 rm load.context obj.priv obj.pub
 ```
+
+Hmm, that didn't work, I got prompted. PCRs match last time, I wonder what's going on...
+
+Lets try getting the key from the tpm...
+
+`sudo tpm2_unseal -c 0x81000000 -p pcr:sha256:0,2,4,7,8,9,14`
+
+Seems fine, and if we check that against the volume?
+
+`sudo tpm2_unseal -c 0x81000000 -p pcr:sha256:0,2,4,7,8,9,14 | sudo cryptsetup luksOpen --test-passphrase /dev/nvme0n1p3`
+
+Works fine. Running the keyscript?
+
+`sudo /usr/local/sbin/unwrap.sh`
+
+Aha, we got 
+
+```
+/usr/local/sbin/unseal.sh: 3: 0: not found
+Enter encrypted volume key (press TAB for no echo) 
+```
+
+Bug in that scipt, this should work:
+
+```
+#!/bin/sh
+if key=$(tpm2_unseal -c 0x81000000 -p pcr:sha256:0,2,4,7,8,9,14); then
+    echo -n $key
+else
+    /lib/cryptsetup/askpass "Automatic unlock failed, enter encrypted volume key"
+fi
+```
+
+Rebuild intramfs again:
+
+```
+sudo mkinitramfs -o /boot/initrd.img-`uname -r` `uname -r`
+```
+
+Rebooting now gets us the prompt, but `seal-root-key` fails at `tpm2_create`.
+Turns out we can't preserve `primary.context`. Removing
+
+`[[ -f "primary.context" ]] || `
+
+makes the script work.
+
+But rebooting still gives a prompt. We're still not unsealing correctly. Even if
+I retun `seal-root-key` and try to unseal again we still don't unseal correctly.
+Removing policy.digest fixes that, we need to always recreate that too. Remove
+this from the script:
+
+`[[ -f "policy.digest" ]] || `
+
+Success, after running `seal-root-key` again ee can reboot without a prompt.
