@@ -230,3 +230,8 @@ this from the script:
 `[[ -f "policy.digest" ]] || `
 
 Success, after running `seal-root-key` again ee can reboot without a prompt.
+
+Our key is still hanging around unsecured in the tpm nvram, we need to get rid
+of that.
+
+`sudo tpm2_nvundefine -C 0x40000001 0x1500016`
