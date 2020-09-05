@@ -27,4 +27,4 @@ tpm2_readpublic -c $PERMANENT_HANDLE && tpm2_evictcontrol -C o -c $PERMANENT_HAN
 # Persist object in tpm
 tpm2_evictcontrol -C o -c load.context $PERMANENT_HANDLE
 # Clean up
-rm load.context obj.priv obj.pub
+rm load.context obj.priv obj.pub primary.context policy.digest
